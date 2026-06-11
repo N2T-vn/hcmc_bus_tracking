@@ -1,0 +1,22 @@
+{
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "db:check": "node dist/db/checkConnection.js",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "cors": "*",
+    "dotenv": "*",
+    "express": "*",
+    "mssql": "*",
+    "msnodesqlv8": "*"
+  },
+  "devDependencies": {
+    "@types/cors": "*",
+    "@types/express": "*",
+    "@types/mssql": "*",
+    "@types/node": "*",
+    "typescript": "*"
+  }
+}
