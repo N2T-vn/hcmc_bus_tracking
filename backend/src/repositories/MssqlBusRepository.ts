@@ -7,7 +7,6 @@ import { config } from "../config/env";
 import pool from "../db/connection";
 import type {
   BusRecord,
-  RouteInfo,
   StatsSummary,
 } from "../models/types";
 import type { IBusRepository } from "./IBusRepository";
@@ -23,7 +22,6 @@ type BusRecordRow = Omit<
   | "aircon"
   | "door_up"
   | "door_down"
-  | "sos"
   | "working"
 > & {
   speed: number | string | null;
@@ -35,14 +33,7 @@ type BusRecordRow = Omit<
   aircon: boolean | number | null;
   door_up: boolean | number | null;
   door_down: boolean | number | null;
-  sos: boolean | number | null;
   working: boolean | number | null;
-};
-
-type RouteInfoRow = {
-  route: string;
-  vehicleCount: number | string;
-  recordCount: number | string;
 };
 
 type StatsSummaryRow = {
@@ -50,7 +41,6 @@ type StatsSummaryRow = {
   totalVehicles: number | string;
   avgSpeed: number | string | null;
   activeVehicles: number | string;
-  sosCount: number | string;
 };
 
 type PlaybackDurationRow = {
@@ -69,8 +59,6 @@ function resolveTableName(value: string): string {
 }
 
 const BUS_TABLE = resolveTableName(config.DB_BUS_TABLE);
-const WAYPOINT_ROUTE = "waypoints";
-
 function toNumber(value: number | string | null): number {
   if (value === null || value === "") {
     return 0;
@@ -95,16 +83,7 @@ function toBusRecord(row: BusRecordRow): BusRecord {
     aircon: toBoolean(row.aircon),
     door_up: toBoolean(row.door_up),
     door_down: toBoolean(row.door_down),
-    sos: toBoolean(row.sos),
     working: toBoolean(row.working),
-  };
-}
-
-function toRouteInfo(row: RouteInfoRow): RouteInfo {
-  return {
-    route: row.route,
-    vehicleCount: toNumber(row.vehicleCount),
-    recordCount: toNumber(row.recordCount),
   };
 }
 
@@ -114,14 +93,12 @@ function toStatsSummary(row: StatsSummaryRow): StatsSummary {
     totalVehicles: toNumber(row.totalVehicles),
     avgSpeed: toNumber(row.avgSpeed),
     activeVehicles: toNumber(row.activeVehicles),
-    sosCount: toNumber(row.sosCount),
   };
 }
 
 function busWaypointSelect(): string {
   return `
     CAST(vehicle AS varchar(128)) AS vehicle,
-    '${WAYPOINT_ROUTE}' AS route,
     COALESCE(CAST(driver AS varchar(128)), '') AS driver,
     COALESCE(CAST(speed AS float), 0) AS speed,
     DATEDIFF_BIG(millisecond, CONVERT(datetime2, '1970-01-01'), CAST(datetime AS datetime2)) AS datetime,
@@ -132,7 +109,6 @@ function busWaypointSelect(): string {
     CAST(COALESCE(aircon, 0) AS bit) AS aircon,
     CAST(COALESCE(door_up, 0) AS bit) AS door_up,
     CAST(COALESCE(door_down, 0) AS bit) AS door_down,
-    CAST(0 AS bit) AS sos,
     CAST(COALESCE(working, ignition, 0) AS bit) AS working
   `;
 }
@@ -261,28 +237,13 @@ export class MssqlBusRepository implements IBusRepository {
     return result.recordset.map(toBusRecord);
   }
 
-  public async fetchRoutes(): Promise<RouteInfo[]> {
-    const result = await pool.request().query<RouteInfoRow>(`
-      SELECT
-        '${WAYPOINT_ROUTE}' AS route,
-        COUNT(DISTINCT vehicle) AS vehicleCount,
-        COUNT(*) AS recordCount
-      FROM ${BUS_TABLE}
-    `);
-
-    console.log(`[query] fetchRoutes table=${config.DB_BUS_TABLE} rows=${result.recordset.length}`);
-
-    return result.recordset.map(toRouteInfo);
-  }
-
   public async fetchStats(): Promise<StatsSummary> {
     const result = await pool.request().query<StatsSummaryRow>(`
       SELECT
         (SELECT COUNT(*) FROM ${BUS_TABLE}) AS totalRecords,
         (SELECT COUNT(DISTINCT vehicle) FROM ${BUS_TABLE}) AS totalVehicles,
         (SELECT AVG(CAST(speed AS float)) FROM ${BUS_TABLE} WHERE speed IS NOT NULL) AS avgSpeed,
-        (SELECT COUNT(DISTINCT vehicle) FROM ${BUS_TABLE} WHERE COALESCE(working, ignition, 0) = 1) AS activeVehicles,
-        CAST(0 AS int) AS sosCount
+        (SELECT COUNT(DISTINCT vehicle) FROM ${BUS_TABLE} WHERE COALESCE(working, ignition, 0) = 1) AS activeVehicles
     `);
 
     console.log(`[query] fetchStats table=${config.DB_BUS_TABLE} rows=1`);

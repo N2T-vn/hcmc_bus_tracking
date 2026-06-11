@@ -1,5 +1,5 @@
 /**
- * Express route handlers for route statistics endpoints.
+ * Express route handlers for dataset statistics endpoints.
  */
 
 import { Router } from "express";
@@ -10,7 +10,6 @@ export function createStatsRouter(busController: BusController): Router {
 
   router.get("/", busController.getStats);
   router.get("/summary", busController.getStats);
-  router.get("/routes", busController.getRoutes);
 
   return router;
 }

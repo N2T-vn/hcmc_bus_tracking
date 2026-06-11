@@ -55,15 +55,6 @@ export class BusController {
     }
   };
 
-  public getRoutes: RequestHandler = async (_req, res, next) => {
-    try {
-      const response = await this.busService.getRoutes();
-      res.json({ data: response });
-    } catch (error) {
-      this.handleError(error, res, next);
-    }
-  };
-
   public getStats: RequestHandler = async (_req, res, next) => {
     try {
       const response = await this.busService.getStats();

@@ -6,7 +6,6 @@ import type {
   BusRecord,
   BusRecordResponse,
   PlaybackResponse,
-  RouteInfo,
   StatsSummary,
 } from "../models/types";
 import { config } from "../config/env";
@@ -119,10 +118,6 @@ export class BusService {
     }
 
     return records.map(toBusRecordResponse);
-  }
-
-  public async getRoutes(): Promise<RouteInfo[]> {
-    return this.busRepository.fetchRoutes();
   }
 
   public async getStats(): Promise<StatsSummary> {

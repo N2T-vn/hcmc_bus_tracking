@@ -32,7 +32,6 @@ POST /api/buses/reset
 GET  /api/buses/latest
 GET  /api/buses/:vehicleId/trajectory
 GET  /api/stats
-GET  /api/stats/routes
 ```
 
 `POST /api/buses/reset` returns elapsed time `0`. The frontend owns its playback

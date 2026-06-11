@@ -2,7 +2,7 @@
 
 This project visualizes Ho Chi Minh City bus GPS data on a web map.
 
-The backend is a Node.js, Express, and TypeScript API that reads a local SQL Server Express database. The frontend is a React, TypeScript, Vite, and Leaflet.js application that will render bus positions and route statistics.
+The backend is a Node.js, Express, and TypeScript API that reads a local SQL Server Express database. The frontend is a React, TypeScript, Vite, and Leaflet.js application that renders bus positions and dataset statistics.
 
 ## How To Run
 
