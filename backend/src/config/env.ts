@@ -69,7 +69,7 @@ export const config: AppConfig = {
   DB_TRUST_CERT: parseBoolean(process.env.DB_TRUST_CERT, true),
   DB_REQUEST_TIMEOUT_MS: parseNumber(process.env.DB_REQUEST_TIMEOUT_MS, 30000),
   // Simulated seconds advanced for each one-second frontend polling tick.
-  SPEED_MULTIPLIER: parsePositiveNumber(process.env.SPEED_MULTIPLIER, 60),
+  SPEED_MULTIPLIER: parsePositiveNumber(process.env.SPEED_MULTIPLIER, 30),
   // Keep selected-bus trails bounded for SQL and Leaflet performance.
   TRAJECTORY_WINDOW_SECONDS: parsePositiveNumber(
     process.env.TRAJECTORY_WINDOW_SECONDS,

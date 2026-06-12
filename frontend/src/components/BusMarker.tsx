@@ -4,6 +4,7 @@
 
 import L from "leaflet";
 import { Marker, Popup } from "react-leaflet";
+import { formatDatasetDateTime } from "../utils/dateTime";
 import type { BusRecord } from "../types";
 
 interface BusMarkerProps {
@@ -55,7 +56,7 @@ export function BusMarker({ bus, isSelected, onSelect }: BusMarkerProps) {
           <span>
             Aircon: {bus.aircon === null ? "unavailable" : bus.aircon ? "on" : "off"}
           </span>
-          <span>{new Date(bus.datetime_iso).toLocaleString()}</span>
+          <span>{formatDatasetDateTime(bus.datetime_iso)}</span>
         </div>
       </Popup>
     </Marker>

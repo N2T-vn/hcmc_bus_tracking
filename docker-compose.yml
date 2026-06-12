@@ -1,1 +1,91 @@
-# Placeholder for Docker Compose service definitions.
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+    ports:
+      - "${DB_HOST_PORT:-1433}:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./database/bus_waypoints.csv:/import/bus_waypoints.csv:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "grep -q 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - ./database/initialize.sql:/init/initialize.sql:ro
+      - ./database/initialize.sh:/init/initialize.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["/bin/bash", "/init/initialize.sh"]
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_SERVER: db
+      DB_PORT: 1433
+      DB_DATABASE: BusGPS
+      DB_BUS_TABLE: dbo.bus_waypoints
+      DB_AUTH_MODE: sql
+      DB_USER: bus_app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
+      DB_ENCRYPT: "false"
+      DB_TRUST_CERT: "true"
+      DB_REQUEST_TIMEOUT_MS: 30000
+      SPEED_MULTIPLIER: ${SPEED_MULTIPLIER:-30}
+      TRAJECTORY_WINDOW_SECONDS: ${TRAJECTORY_WINDOW_SECONDS:-900}
+      CORS_ORIGIN: http://localhost:${FRONTEND_HOST_PORT:-5173}
+    ports:
+      - "${BACKEND_HOST_PORT:-3001}:3001"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_POLL_INTERVAL_MS: ${VITE_POLL_INTERVAL_MS:-1000}
+    ports:
+      - "${FRONTEND_HOST_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sqlserver_data:

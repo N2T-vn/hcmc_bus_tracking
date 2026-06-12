@@ -74,7 +74,7 @@ export class BusService {
 
     this.resetOnNextTick = false;
     const windowStartTimestamp = this.cursorTimestamp;
-    // Each one-second frontend poll advances simulated time by this many seconds.
+    // By default, each one-second frontend poll advances dataset time 30 seconds.
     const requestedWindowEnd =
       windowStartTimestamp + config.SPEED_MULTIPLIER * 1000;
     // fetchWindow uses [start, end), so one millisecond includes the final ping.

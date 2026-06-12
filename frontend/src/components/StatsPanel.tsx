@@ -2,6 +2,8 @@
  * Statistics panel component for dataset and playback metrics.
  */
 
+import { formatDatasetDateTime } from "../utils/dateTime";
+
 interface StatsPanelProps {
   totalSnapshotCount: number;
   activeSnapshotCount: number;
@@ -75,7 +77,7 @@ export function StatsPanel({
             <strong>
               {playbackTimestampIso === null
                 ? "-"
-                : new Date(playbackTimestampIso).toLocaleTimeString()}
+                : formatDatasetDateTime(playbackTimestampIso)}
             </strong>
           </div>
           <div>

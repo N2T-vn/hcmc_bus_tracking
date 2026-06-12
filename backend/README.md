@@ -35,6 +35,10 @@ GET  /api/buses/:vehicleId/trajectory?targetTimestamp=<epochMilliseconds>
 dataset timestamp. Each `/next` request queries one indexed time window and
 advances the cursor by `SPEED_MULTIPLIER` seconds.
 
+For the included dataset, playback starts at `2025-03-22 03:23:02`. With
+`SPEED_MULTIPLIER=30` and one frontend poll per second, each request advances
+the dataset clock by 30 seconds.
+
 Before running playback, execute
 `src/data/create-playback-index.sql` using a database administrator account.
 The datetime-leading index is required for global playback windows, while the

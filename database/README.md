@@ -1,26 +1,48 @@
-# Database
+# Database Dataset
 
-Tập tin CSV lớn `bus_waypoints.csv` đã được loại khỏi kho mã vì vượt quá giới hạn của GitHub (100 MB).
+The dataset is distributed separately from the Git repository. Download the
+shared CSV and place it at:
 
-Nếu bạn cần dữ liệu này, có các lựa chọn:
+```text
+database/bus_waypoints.csv
+```
 
-1. Sử dụng Git LFS (đề xuất):
+The filename is required because the Docker database initializer will mount
+this exact path into the SQL Server container.
 
-   ```bash
-   git lfs install
-   git lfs track "database/bus_waypoints.csv"
-   git add .gitattributes
-   git add database/bus_waypoints.csv
-   git commit -m "Add database/bus_waypoints.csv via Git LFS"
-   git push
-   ```
+Expected CSV header:
 
-2. Hoặc lưu file ở nơi khác (Google Drive / Dropbox / internal file server) và thêm link tải ở đây. Ví dụ:
+```text
+vehicle,datetime,x,y,speed,heading,ignition,aircon,door_up,door_down,driver
+```
 
-   - Tải lên Drive/Dropbox → Chia sẻ link → Cập nhật file này với link tải.
+The file is about 166 MB and is ignored by Git because GitHub rejects regular
+files larger than 100 MB.
 
-3. Nếu muốn tôi giúp upload vào Git LFS hoặc hướng dẫn chia nhỏ/nén file, hãy cho biết lựa chọn.
+Verify the file from the project root:
 
----
+```powershell
+Test-Path .\database\bus_waypoints.csv
+Get-Item .\database\bus_waypoints.csv | Select-Object Name, Length
+Get-Content .\database\bus_waypoints.csv -TotalCount 1
+```
 
-Vui lòng không thêm lại file CSV thẳng vào repo (kích thước >100MB) nếu không dùng Git LFS.
+Expected result:
+
+```text
+Test-Path: True
+Header: vehicle,datetime,x,y,speed,heading,ignition,aircon,door_up,door_down,driver
+```
+
+The application imports these columns:
+
+```text
+vehicle, datetime, x, y, speed, heading, ignition, aircon
+```
+
+`door_up`, `door_down`, and `driver` are not used by the current application.
+
+On the first `docker compose up`, the CSV is mounted read-only into SQL Server.
+The one-time `db-init` job creates `BusGPS.dbo.bus_waypoints`, imports the
+dataset, creates playback indexes, and creates the read-only `bus_app` login.
+Later starts reuse the named SQL Server volume and skip the CSV import.

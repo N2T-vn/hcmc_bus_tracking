@@ -152,7 +152,7 @@ export default function App() {
           isPolling={isPolling}
           lastUpdated={lastUpdated}
           onPollingChange={setIsPolling}
-          playbackTimestampIso={batch?.windowEndIso ?? null}
+          playbackTimestampIso={batch?.windowStartIso ?? null}
           selectedVehicle={selectedBus?.vehicle ?? null}
           totalSnapshotCount={buses.length}
         />
