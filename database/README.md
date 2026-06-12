@@ -7,8 +7,8 @@ shared CSV and place it at:
 database/bus_waypoints.csv
 ```
 
-The filename is required because the Docker database initializer will mount
-this exact path into the SQL Server container.
+The filename is required by the documented `docker cp` command and SQL import
+script.
 
 Expected CSV header:
 
@@ -42,7 +42,10 @@ vehicle, datetime, x, y, speed, heading, ignition, aircon
 
 `door_up`, `door_down`, and `driver` are not used by the current application.
 
-On the first `docker compose up`, the CSV is mounted read-only into SQL Server.
-The one-time `db-init` job creates `BusGPS.dbo.bus_waypoints`, imports the
-dataset, creates playback indexes, and creates the read-only `bus_app` login.
-Later starts reuse the named SQL Server volume and skip the CSV import.
+SQL Server runs as an independent Docker container named `BusGPS`. Copy this
+CSV and `initialize.sql` into `/var/opt/mssql/import`, then execute the script
+with `sqlcmd`. The script creates `BusGPS.dbo.bus_waypoints`, imports the
+dataset when the table is empty, creates playback indexes, and creates the
+read-only `bus_app` login.
+
+Docker Compose only manages the backend and frontend application containers.

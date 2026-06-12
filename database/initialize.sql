@@ -46,7 +46,7 @@ BEGIN
     );
 
     BULK INSERT dbo.bus_waypoints_import
-    FROM '/import/bus_waypoints.csv'
+    FROM '/var/opt/mssql/import/bus_waypoints.csv'
     WITH (
         FORMAT = 'CSV',
         FIRSTROW = 2,

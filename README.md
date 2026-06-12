@@ -34,54 +34,89 @@ The first line must be:
 vehicle,datetime,x,y,speed,heading,ignition,aircon,door_up,door_down,driver
 ```
 
-Do not change the filename or CSV column order. The Docker database initializer
-will mount this file into the SQL Server container and import it into
-`BusGPS.dbo.bus_waypoints`.
+Do not change the filename or CSV column order.
 
-### Run with Docker
+### 1. Create the SQL Server container
 
 Requirements:
 
 - Docker Desktop using Linux containers.
-- At least 4 GB of memory available to Docker.
 - `database/bus_waypoints.csv` prepared as described above.
 
-Create the Docker environment file:
+Create a persistent database volume and SQL Server 2019 container:
+
+```powershell
+docker volume create busgps_data
+
+docker run -d `
+  --name BusGPS `
+  -e "ACCEPT_EULA=Y" `
+  -e "MSSQL_PID=Developer" `
+  -e "MSSQL_SA_PASSWORD=BusApp@12345" `
+  -p 1433:1433 `
+  -v busgps_data:/var/opt/mssql `
+  mcr.microsoft.com/mssql/server:2019-latest
+```
+
+Wait until SQL Server is ready:
+
+```powershell
+docker logs -f BusGPS
+```
+
+After seeing `SQL Server is now ready for client connections`, press `Ctrl+C`.
+
+Create the import directory and copy the dataset and SQL script:
+
+```powershell
+docker exec BusGPS mkdir -p /var/opt/mssql/import
+docker cp .\database\bus_waypoints.csv BusGPS:/var/opt/mssql/import/bus_waypoints.csv
+docker cp .\database\initialize.sql BusGPS:/var/opt/mssql/import/initialize.sql
+```
+
+Import the CSV, create indexes, and create the read-only `bus_app` login:
+
+```powershell
+docker exec BusGPS /opt/mssql-tools18/bin/sqlcmd `
+  -S localhost `
+  -U sa `
+  -P "BusApp@12345" `
+  -C -b `
+  -v APP_DB_PASSWORD="BusApp@12345" `
+  -i /var/opt/mssql/import/initialize.sql
+```
+
+Expected final output includes:
+
+```text
+imported_rows: 1050694
+first_record:  2025-03-22 03:23:02
+```
+
+Verify the independent database container:
+
+```powershell
+docker ps --filter "name=BusGPS"
+```
+
+### 2. Run backend and frontend
+
+Create the application environment file:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and replace both example passwords. Each SQL Server password must
-contain uppercase and lowercase letters, digits, and symbols.
+The values of `MSSQL_SA_PASSWORD` and `APP_DB_PASSWORD` must match the
+passwords used above. The backend connects to the independent database through
+`host.docker.internal:1433`.
 
-Build and start the complete system:
+Build and start the application containers:
 
 ```powershell
 docker compose up --build -d
-```
-
-The first startup imports about 1.05 million CSV rows and creates two indexes,
-so it can take several minutes. Follow the import job:
-
-```powershell
-docker compose logs -f db-init
-```
-
-Wait until the log contains:
-
-```text
-Database initialization completed.
-```
-
-Check all services:
-
-```powershell
 docker compose ps
 ```
-
-The expected long-running services are `db`, `backend`, and `frontend`.
-`db-init` should show `Exited (0)` because it is a successful one-time job.
 
 Open:
 
@@ -97,14 +132,18 @@ Useful commands:
 docker compose logs -f backend
 docker compose restart backend frontend
 docker compose down
+docker stop BusGPS
+docker start BusGPS
 ```
 
-`docker compose down` preserves the imported SQL Server volume. To delete the
-database and force a clean CSV import:
+`docker compose down` only removes backend and frontend. It does not remove the
+independent `BusGPS` container or its `busgps_data` volume.
+
+To completely recreate the database:
 
 ```powershell
-docker compose down -v
-docker compose up --build -d
+docker rm -f BusGPS
+docker volume rm busgps_data
 ```
 
 ### Run without Docker

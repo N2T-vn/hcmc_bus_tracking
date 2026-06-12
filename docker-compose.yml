@@ -1,49 +1,12 @@
 services:
-  db:
-    image: mcr.microsoft.com/mssql/server:2019-latest
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
-    ports:
-      - "${DB_HOST_PORT:-1433}:1433"
-    volumes:
-      - sqlserver_data:/var/opt/mssql
-      - ./database/bus_waypoints.csv:/import/bus_waypoints.csv:ro
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "grep -q 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
-    restart: unless-stopped
-
-  db-init:
-    image: mcr.microsoft.com/mssql/server:2019-latest
-    environment:
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
-    volumes:
-      - ./database/initialize.sql:/init/initialize.sql:ro
-      - ./database/initialize.sh:/init/initialize.sh:ro
-    depends_on:
-      db:
-        condition: service_healthy
-    command: ["/bin/bash", "/init/initialize.sh"]
-    restart: "no"
-
   backend:
     build:
       context: ./backend
     environment:
       NODE_ENV: production
       PORT: 3001
-      DB_SERVER: db
-      DB_PORT: 1433
+      DB_SERVER: host.docker.internal
+      DB_PORT: ${DB_HOST_PORT:-1433}
       DB_DATABASE: BusGPS
       DB_BUS_TABLE: dbo.bus_waypoints
       DB_AUTH_MODE: sql
@@ -57,9 +20,6 @@ services:
       CORS_ORIGIN: http://localhost:${FRONTEND_HOST_PORT:-5173}
     ports:
       - "${BACKEND_HOST_PORT:-3001}:3001"
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -86,6 +46,3 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  sqlserver_data:
