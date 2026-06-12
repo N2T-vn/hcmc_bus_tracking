@@ -2,14 +2,50 @@
  * Root React component for global time-window playback.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BusMap } from "./components/BusMap";
 import { StatsPanel } from "./components/StatsPanel";
 import { usePolling } from "./hooks/usePolling";
 import { api } from "./services/api";
-import type { BusRecord } from "./types";
+import type { BusRecord, StationaryAlert } from "./types";
 
 const POLL_INTERVAL_MS = Number(import.meta.env.VITE_POLL_INTERVAL_MS ?? 1000); // Real-time tick rate.
+const STATIONARY_DURATION_MS = 5 * 60 * 1000;
+const STATIONARY_RADIUS_METERS = 50;
+
+interface StationaryTracker {
+  anchorTimestamp: number;
+  anchorX: number;
+  anchorY: number;
+  latestTimestamp: number;
+  latestX: number;
+  latestY: number;
+}
+
+function distanceInMeters(
+  firstX: number,
+  firstY: number,
+  secondX: number,
+  secondY: number,
+): number {
+  const earthRadiusMeters = 6_371_000;
+  const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(secondY - firstY);
+  const longitudeDelta = toRadians(secondX - firstX);
+  const firstLatitude = toRadians(firstY);
+  const secondLatitude = toRadians(secondY);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(firstLatitude) *
+      Math.cos(secondLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return (
+    2 *
+    earthRadiusMeters *
+    Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+}
 
 export default function App() {
   const [selectedBus, setSelectedBus] = useState<BusRecord | null>(null);
@@ -20,6 +56,13 @@ export default function App() {
   const [isPolling, setIsPolling] = useState(true);
   const [isPlaybackReady, setIsPlaybackReady] = useState(false); // Blocks polling until reset.
   const [sideError, setSideError] = useState<string | null>(null); // Non-polling API errors.
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [stationaryAlerts, setStationaryAlerts] = useState<StationaryAlert[]>(
+    [],
+  );
+  const stationaryTrackerRef = useRef<Map<string, StationaryTracker>>(
+    new Map(),
+  );
 
   const fetchNextBuses = useCallback(() => api.getNextBuses(), []);
   const {
@@ -41,6 +84,8 @@ export default function App() {
           setBusByVehicle(new Map());
           setSelectedBus(null);
           setTrajectory([]);
+          setStationaryAlerts([]);
+          stationaryTrackerRef.current.clear();
           setSideError(null);
           setIsPlaybackReady(true);
         }
@@ -64,6 +109,67 @@ export default function App() {
     if (batch === null) {
       return;
     }
+
+    if (batch.reset) {
+      stationaryTrackerRef.current.clear();
+      setStationaryAlerts([]);
+    }
+
+    // Dataset timestamps keep detection stable regardless of the 30x replay rate.
+    // Leaving the anchor radius starts a new stationary observation period.
+    batch.data.forEach((record) => {
+      const tracker = stationaryTrackerRef.current.get(record.vehicle);
+
+      if (
+        tracker === undefined ||
+        distanceInMeters(
+          tracker.anchorX,
+          tracker.anchorY,
+          record.x,
+          record.y,
+        ) > STATIONARY_RADIUS_METERS
+      ) {
+        stationaryTrackerRef.current.set(record.vehicle, {
+          anchorTimestamp: record.datetime,
+          anchorX: record.x,
+          anchorY: record.y,
+          latestTimestamp: record.datetime,
+          latestX: record.x,
+          latestY: record.y,
+        });
+        return;
+      }
+
+      stationaryTrackerRef.current.set(record.vehicle, {
+        ...tracker,
+        latestTimestamp: record.datetime,
+        latestX: record.x,
+        latestY: record.y,
+      });
+    });
+
+    const nextAlerts = Array.from(stationaryTrackerRef.current.entries())
+      .flatMap(([vehicle, tracker]) => {
+        const durationMs = tracker.latestTimestamp - tracker.anchorTimestamp;
+
+        if (durationMs < STATIONARY_DURATION_MS) {
+          return [];
+        }
+
+        return [
+          {
+            vehicle,
+            sinceTimestamp: tracker.anchorTimestamp,
+            latestTimestamp: tracker.latestTimestamp,
+            durationSeconds: Math.floor(durationMs / 1000),
+            occurrenceCount: Math.floor(durationMs / STATIONARY_DURATION_MS),
+            x: tracker.latestX,
+            y: tracker.latestY,
+          },
+        ];
+      })
+      .sort((first, second) => second.durationSeconds - first.durationSeconds);
+    setStationaryAlerts(nextAlerts);
 
     setBusByVehicle((previous) => {
       // A replay reset removes positions retained from the previous dataset cycle.
@@ -118,6 +224,25 @@ export default function App() {
     () => Array.from(busByVehicle.values()),
     [busByVehicle],
   );
+  const visibleBuses = useMemo(() => {
+    const normalizedSearch = vehicleSearch.trim().toLowerCase();
+
+    return normalizedSearch === ""
+      ? buses
+      : buses.filter((bus) =>
+          bus.vehicle.toLowerCase().includes(normalizedSearch),
+        );
+  }, [buses, vehicleSearch]);
+
+  useEffect(() => {
+    if (
+      selectedBus !== null &&
+      !visibleBuses.some((bus) => bus.vehicle === selectedBus.vehicle)
+    ) {
+      setSelectedBus(null);
+    }
+  }, [selectedBus, visibleBuses]);
+
   const activeSnapshotCount = buses.filter(
     (bus) => bus.ignition === true,
   ).length;
@@ -151,10 +276,21 @@ export default function App() {
           averageSnapshotSpeed={averageSnapshotSpeed}
           isPolling={isPolling}
           lastUpdated={lastUpdated}
+          onClearSearch={() => setVehicleSearch("")}
+          onInspectAlert={(vehicle) => {
+            setVehicleSearch(vehicle);
+            setSelectedBus(busByVehicle.get(vehicle) ?? null);
+          }}
           onPollingChange={setIsPolling}
+          onVehicleSearchChange={setVehicleSearch}
           playbackTimestampIso={batch?.windowStartIso ?? null}
           selectedVehicle={selectedBus?.vehicle ?? null}
+          stationaryAlerts={stationaryAlerts}
+          stationaryDurationMinutes={STATIONARY_DURATION_MS / 60_000}
+          stationaryRadiusMeters={STATIONARY_RADIUS_METERS}
           totalSnapshotCount={buses.length}
+          vehicleSearch={vehicleSearch}
+          visibleSnapshotCount={visibleBuses.length}
         />
 
         <section className="map-area">
@@ -163,7 +299,7 @@ export default function App() {
             <div className="loading-panel">Waiting for the first vehicle pings...</div>
           ) : null}
           <BusMap
-            buses={buses}
+            buses={visibleBuses}
             onSelectBus={setSelectedBus}
             selectedBus={selectedBus}
             trajectory={trajectory}

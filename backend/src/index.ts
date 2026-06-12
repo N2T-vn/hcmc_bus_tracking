@@ -59,7 +59,7 @@ app.use(errorHandler);
 async function startServer(): Promise<void> {
   await connectDB();
 
-  app.listen(config.PORT);
+  app.listen(config.PORT);    // Start the backend server after DB connection is established.
   console.log(`Server listening on port ${config.PORT}`);
 }
 

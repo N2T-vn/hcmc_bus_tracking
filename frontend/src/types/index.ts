@@ -28,3 +28,13 @@ export interface PlaybackResponse<T> {
 export interface CollectionResponse<T> {
   data: T[];
 }
+
+export interface StationaryAlert {
+  vehicle: string;
+  sinceTimestamp: number;
+  latestTimestamp: number;
+  durationSeconds: number;
+  occurrenceCount: number;
+  x: number;
+  y: number;
+}
