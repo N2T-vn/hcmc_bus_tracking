@@ -10,7 +10,6 @@ export function createBusRouter(busController: BusController): Router {
 
   router.get("/next", busController.getNextBatch);
   router.post("/reset", busController.resetPlayback);
-  router.get("/latest", busController.getLatestBuses);
   router.get("/:vehicleId/trajectory", busController.getTrajectory);
 
   return router;

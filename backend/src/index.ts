@@ -14,7 +14,6 @@ import { BusController } from "./controllers/BusController";
 import { connectDB } from "./db/connection";
 import { MssqlBusRepository } from "./repositories/MssqlBusRepository";
 import { createBusRouter } from "./routes/buses";
-import { createStatsRouter } from "./routes/stats";
 import { BusService } from "./services/BusService";
 
 const app: Express = express();
@@ -49,7 +48,6 @@ app.get("/health", (_req: Request, res: Response): void => {
 });
 
 app.use("/api/buses", createBusRouter(busController));
-app.use("/api/stats", createStatsRouter(busController));
 
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next): void => {
   console.error("Unhandled request error", error);

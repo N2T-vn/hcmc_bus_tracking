@@ -1,1 +1,0 @@
-SELECT * FROM hcmc_bus_gps_dataset;

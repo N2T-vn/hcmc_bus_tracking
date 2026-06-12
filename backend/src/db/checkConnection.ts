@@ -25,18 +25,14 @@ async function checkConnection(): Promise<void> {
     const result = await pool.request().query(`
       SELECT TOP (1)
         vehicle,
-        driver,
         speed,
         datetime,
         x,
         y,
         heading,
         ignition,
-        aircon,
-        door_up,
-        door_down,
-        working
-      FROM ${tableName}
+        aircon
+      FROM ${tableName} WITH (INDEX(IX_bus_waypoints_datetime_vehicle))
       ORDER BY datetime ASC
     `);
 

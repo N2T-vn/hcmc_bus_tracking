@@ -1,36 +1,34 @@
 /**
- * TypeScript interfaces for backend bus records, dataset statistics, and API payloads.
+ * TypeScript interfaces for bus records and playback API payloads.
  */
 
 export interface BusRecord {
   vehicle: string;
-  driver: string;
-  speed: number;
+  speed: number | null;
   datetime: number;
   x: number;
   y: number;
-  heading: number;
-  ignition: boolean;
-  aircon: boolean;
-  door_up: boolean;
-  door_down: boolean;
-  working: boolean;
+  heading: number | null;
+  ignition: boolean | null;
+  aircon: boolean | null;
 }
 
 export interface BusRecordResponse extends BusRecord {
   datetime_iso: string;
 }
 
-export interface StatsSummary {
-  totalRecords: number;
-  totalVehicles: number;
-  avgSpeed: number;
-  activeVehicles: number;
+export interface PlaybackRange {
+  startTimestamp: number;
+  endTimestamp: number;
 }
 
 export interface PlaybackResponse<T> {
   data: T[];
-  playbackElapsedSeconds: number;
-  nextPlaybackElapsedSeconds: number;
+  windowStartTimestamp: number;
+  windowStartIso: string;
+  windowEndTimestamp: number;
+  windowEndIso: string;
+  nextCursorTimestamp: number;
+  reset: boolean;
   hasMore: boolean;
 }

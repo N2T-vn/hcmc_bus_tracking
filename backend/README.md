@@ -7,7 +7,6 @@ Node.js, Express, and TypeScript API for serving HCMC bus GPS data from a local 
 - Expose bus and statistics API endpoints.
 - Keep query logic isolated in repository implementations.
 - Use manual constructor injection for service dependencies.
-- Support SQL Server first, with ClickHouse as a future repository strategy.
 
 ## Local Commands
 
@@ -27,19 +26,16 @@ Configuration is read from `backend/.env` when present. The current local setup 
 
 ```text
 GET  /health
-GET  /api/buses/next?elapsedSeconds=<seconds>
+GET  /api/buses/next
 POST /api/buses/reset
-GET  /api/buses/latest
-GET  /api/buses/:vehicleId/trajectory
-GET  /api/stats
+GET  /api/buses/:vehicleId/trajectory?targetTimestamp=<epochMilliseconds>
 ```
 
-`POST /api/buses/reset` returns elapsed time `0`. The frontend owns its playback
-clock and sends it to `/api/buses/next`, so concurrent clients have independent
-playback sessions. Each vehicle is replayed relative to its own first GPS row
-and loops independently when it reaches the end of its recorded trajectory.
+`POST /api/buses/reset` moves the global playback cursor to the earliest
+dataset timestamp. Each `/next` request queries one indexed time window and
+advances the cursor by `SPEED_MULTIPLIER` seconds.
 
-Before running playback against the full dataset, execute
+Before running playback, execute
 `src/data/create-playback-index.sql` using a database administrator account.
-The application account is intentionally read-only and cannot install the
-required index.
+The datetime-leading index is required for global playback windows, while the
+vehicle-leading index supports selected-bus trails.

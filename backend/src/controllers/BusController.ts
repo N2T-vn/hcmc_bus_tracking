@@ -1,5 +1,5 @@
 /**
- * Express controller methods for bus and statistics endpoints.
+ * Express controller methods for playback and trajectory endpoints.
  */
 
 import type { NextFunction, Request, RequestHandler, Response } from "express";
@@ -14,19 +14,8 @@ export class BusController {
 
   public getNextBatch: RequestHandler = async (req, res, next) => {
     try {
-      const response = await this.busService.getNextSnapshot(
-        req.query.elapsedSeconds,
-      );
+      const response = await this.busService.getNextWindow();
       res.json(response);
-    } catch (error) {
-      this.handleError(error, res, next);
-    }
-  };
-
-  public getLatestBuses: RequestHandler = async (_req, res, next) => {
-    try {
-      const response = await this.busService.getLatestBuses();
-      res.json({ data: response });
     } catch (error) {
       this.handleError(error, res, next);
     }
@@ -34,9 +23,10 @@ export class BusController {
 
   public resetPlayback: RequestHandler = async (_req, res, next) => {
     try {
-      const playbackElapsedSeconds = await this.busService.resetPlayback();
+      const cursorTimestamp = await this.busService.resetPlayback();
       res.json({
-        playbackElapsedSeconds,
+        cursorTimestamp,
+        cursorIso: new Date(cursorTimestamp).toISOString(),
       });
     } catch (error) {
       this.handleError(error, res, next);
@@ -47,18 +37,10 @@ export class BusController {
     try {
       const response = await this.busService.getTrajectory(
         req.params.vehicleId,
+        req.query.targetTimestamp,
         req.query.limit,
       );
       res.json({ data: response });
-    } catch (error) {
-      this.handleError(error, res, next);
-    }
-  };
-
-  public getStats: RequestHandler = async (_req, res, next) => {
-    try {
-      const response = await this.busService.getStats();
-      res.json(response);
     } catch (error) {
       this.handleError(error, res, next);
     }

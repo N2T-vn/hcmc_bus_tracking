@@ -1,18 +1,18 @@
 /**
- * Bus business logic service that receives a repository through constructor injection.
+ * Global time-window playback service.
  */
 
+import { config } from "../config/env";
 import type {
   BusRecord,
   BusRecordResponse,
+  PlaybackRange,
   PlaybackResponse,
-  StatsSummary,
 } from "../models/types";
-import { config } from "../config/env";
 import type { IBusRepository } from "../repositories/IBusRepository";
 
-const DEFAULT_TRAJECTORY_LIMIT = 200;
-const MAX_TRAJECTORY_LIMIT = 1000;
+const DEFAULT_TRAJECTORY_LIMIT = 200; // Keeps the default Leaflet polyline lightweight.
+const MAX_TRAJECTORY_LIMIT = 1000; // Prevents unbounded trajectory responses.
 
 export class ServiceError extends Error {
   public constructor(
@@ -42,8 +42,7 @@ function normalizeLimit(
 }
 
 function toDateTimeIso(datetime: number): string {
-  const milliseconds = datetime < 10_000_000_000 ? datetime * 1000 : datetime;
-  return new Date(milliseconds).toISOString();
+  return new Date(datetime).toISOString();
 }
 
 function toBusRecordResponse(record: BusRecord): BusRecordResponse {
@@ -54,56 +53,78 @@ function toBusRecordResponse(record: BusRecord): BusRecordResponse {
 }
 
 export class BusService {
-  private playbackDurationSeconds: number | undefined;
+  private cursorTimestamp: number | undefined; // Simulated dataset time shared by clients.
+  private playbackRange: PlaybackRange | undefined; // Cached static MIN/MAX timestamps.
+  private resetOnNextTick = false; // Clears stale client positions after replay wraps.
 
   public constructor(private readonly busRepository: IBusRepository) {}
 
-  public async getNextSnapshot(
-    elapsedSecondsValue?: unknown,
-  ): Promise<PlaybackResponse<BusRecordResponse>> {
-    const durationSeconds = await this.ensurePlaybackDuration();
-    const elapsedSeconds = this.normalizePlaybackElapsedSeconds(
-      elapsedSecondsValue,
-      durationSeconds,
-    );
-    const records = await this.busRepository.fetchSnapshot(
-      elapsedSeconds,
-      config.PLAYBACK_ACTIVE_WINDOW_SECONDS,
-    );
-    const candidateElapsedSeconds =
-      elapsedSeconds + config.PLAYBACK_STEP_SECONDS;
-    const hasMore = candidateElapsedSeconds <= durationSeconds;
-    const nextPlaybackElapsedSeconds = hasMore ? candidateElapsedSeconds : 0;
+  public async getNextWindow(): Promise<PlaybackResponse<BusRecordResponse>> {
+    const range = await this.ensurePlaybackRange();
+    let reset = this.resetOnNextTick; // Included in the response so clients clear old markers.
 
-    console.log(
-      `[playback] snapshot elapsed=${elapsedSeconds}s vehicles=${records.length} next=${nextPlaybackElapsedSeconds}s hasMore=${hasMore}`,
+    if (
+      this.cursorTimestamp === undefined ||
+      this.cursorTimestamp > range.endTimestamp
+    ) {
+      // Always initialize T from the earliest database timestamp.
+      this.cursorTimestamp = range.startTimestamp;
+      reset = true;
+    }
+
+    this.resetOnNextTick = false;
+    const windowStartTimestamp = this.cursorTimestamp;
+    // Each one-second frontend poll advances simulated time by this many seconds.
+    const requestedWindowEnd =
+      windowStartTimestamp + config.SPEED_MULTIPLIER * 1000;
+    // fetchWindow uses [start, end), so one millisecond includes the final ping.
+    const windowEndTimestamp = Math.min(
+      requestedWindowEnd,
+      range.endTimestamp + 1,
     );
+    const records = await this.busRepository.fetchWindow(
+      windowStartTimestamp,
+      windowEndTimestamp,
+    );
+
+    const hasMore = requestedWindowEnd <= range.endTimestamp;
+    // Advance T by time, never by row count, OFFSET, or LIMIT.
+    this.cursorTimestamp = hasMore
+      ? requestedWindowEnd
+      : range.endTimestamp + 1;
+    this.resetOnNextTick = !hasMore;
 
     return {
       data: records.map(toBusRecordResponse),
-      playbackElapsedSeconds: elapsedSeconds,
-      nextPlaybackElapsedSeconds,
+      windowStartTimestamp,
+      windowStartIso: toDateTimeIso(windowStartTimestamp),
+      windowEndTimestamp,
+      windowEndIso: toDateTimeIso(windowEndTimestamp),
+      nextCursorTimestamp: this.cursorTimestamp,
+      reset,
       hasMore,
     };
   }
 
   public async resetPlayback(): Promise<number> {
-    await this.ensurePlaybackDuration(true);
-    console.log("[playback] elapsed time reset to 0s");
-    return 0;
-  }
-
-  public async getLatestBuses(): Promise<BusRecordResponse[]> {
-    const records = await this.busRepository.fetchLatest();
-    return records.map(toBusRecordResponse);
+    const range = await this.ensurePlaybackRange(true);
+    this.cursorTimestamp = range.startTimestamp;
+    this.resetOnNextTick = true;
+    return this.cursorTimestamp;
   }
 
   public async getTrajectory(
     vehicleId: unknown,
+    targetTimestampValue?: unknown,
     limitValue?: unknown,
   ): Promise<BusRecordResponse[]> {
     if (typeof vehicleId !== "string" || vehicleId.trim() === "") {
       throw new ServiceError("vehicleId is required", 400);
+    }
+
+    const targetTimestamp = Number(targetTimestampValue);
+    if (!Number.isFinite(targetTimestamp)) {
+      throw new ServiceError("targetTimestamp is required", 400);
     }
 
     const limit = normalizeLimit(
@@ -111,7 +132,12 @@ export class BusService {
       DEFAULT_TRAJECTORY_LIMIT,
       MAX_TRAJECTORY_LIMIT,
     );
-    const records = await this.busRepository.fetchTrajectory(vehicleId.trim(), limit);
+    const records = await this.busRepository.fetchTrajectory(
+      vehicleId.trim(),
+      targetTimestamp,
+      config.TRAJECTORY_WINDOW_SECONDS,
+      limit,
+    );
 
     if (records.length === 0) {
       throw new ServiceError("vehicle trajectory not found", 404);
@@ -120,46 +146,16 @@ export class BusService {
     return records.map(toBusRecordResponse);
   }
 
-  public async getStats(): Promise<StatsSummary> {
-    const stats = await this.busRepository.fetchStats();
-
-    if (stats === undefined) {
-      throw new ServiceError("statistics are unavailable", 503);
+  private async ensurePlaybackRange(refresh = false): Promise<PlaybackRange> {
+    if (refresh || this.playbackRange === undefined) {
+      // A reset refreshes the range in case the source table was replaced.
+      this.playbackRange = await this.busRepository.fetchPlaybackRange();
     }
 
-    return stats;
-  }
-
-  private async ensurePlaybackDuration(refresh = false): Promise<number> {
-    if (refresh || this.playbackDurationSeconds === undefined) {
-      this.playbackDurationSeconds =
-        await this.busRepository.fetchPlaybackDurationSeconds();
-    }
-
-    if (this.playbackDurationSeconds === undefined) {
+    if (this.playbackRange === undefined) {
       throw new ServiceError("playback dataset is empty", 503);
     }
 
-    return this.playbackDurationSeconds;
-  }
-
-  private normalizePlaybackElapsedSeconds(
-    value: unknown,
-    durationSeconds: number,
-  ): number {
-    if (value === undefined) {
-      return 0;
-    }
-
-    const elapsedSeconds = Number(value);
-    if (
-      !Number.isInteger(elapsedSeconds) ||
-      elapsedSeconds < 0 ||
-      elapsedSeconds > durationSeconds
-    ) {
-      throw new ServiceError("elapsedSeconds is outside the playback range", 400);
-    }
-
-    return elapsedSeconds;
+    return this.playbackRange;
   }
 }

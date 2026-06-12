@@ -68,8 +68,6 @@ IBusRepository
         |
         +--> MssqlBusRepository
         |
-        +--> ClickHouseBusRepository (future)
-        |
         v
 SQL Server Express Database
 ```
@@ -92,16 +90,20 @@ DB_USER=bus_app
 The simulated realtime playback is controlled by:
 
 ```env
-VITE_POLL_INTERVAL_MS=5000
-PLAYBACK_STEP_SECONDS=5
-PLAYBACK_ACTIVE_WINDOW_SECONDS=300
+VITE_POLL_INTERVAL_MS=1000
+SPEED_MULTIPLIER=60
+TRAJECTORY_WINDOW_SECONDS=900
 ```
 
-Each playback request returns at most one GPS position per vehicle. Because the
-source trajectories do not share one continuous absolute time range, every
-vehicle is synchronized relative to its own first GPS row and loops when its
-trajectory ends. Vehicles without a recent row inside the active window are
-excluded from that snapshot.
+The backend keeps one global cursor starting at the earliest dataset timestamp.
+Each real-time tick queries `[T, T + SPEED_MULTIPLIER)` and then advances `T`.
+With the default multiplier of `60`, one real second replays one dataset minute,
+so an 11-hour-12-minute dataset completes in about 11 minutes 12 seconds.
+The frontend retains the last known position for vehicles without a ping in the
+current tick.
+
+The live trail for a selected vehicle is limited to
+`TRAJECTORY_WINDOW_SECONDS`.
 
 Run `backend/src/data/create-playback-index.sql` once with a database account
 that has `CREATE INDEX` permission. This index is required for responsive
@@ -111,5 +113,4 @@ create it automatically.
 ## Patterns
 
 - Repository Pattern: all query logic lives behind repository interfaces.
-- Strategy Pattern: database implementations are swappable behind the same contract.
 - Dependency Injection: services receive repositories through manual constructor injection.

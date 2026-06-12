@@ -21,8 +21,8 @@ export interface AppConfig {
   DB_ENCRYPT: boolean;
   DB_TRUST_CERT: boolean;
   DB_REQUEST_TIMEOUT_MS: number;
-  PLAYBACK_STEP_SECONDS: number;
-  PLAYBACK_ACTIVE_WINDOW_SECONDS: number;
+  SPEED_MULTIPLIER: number;
+  TRAJECTORY_WINDOW_SECONDS: number;
   PORT: number;
   CORS_ORIGIN: string;
 }
@@ -44,6 +44,11 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   return value.toLowerCase() === "true";
 }
 
+function parsePositiveNumber(value: string | undefined, fallback: number): number {
+  const parsed = parseNumber(value, fallback);
+  return parsed > 0 ? parsed : fallback;
+}
+
 function parseServerName(value: string | undefined, fallback: string): string {
   return (value ?? fallback).replace(/\\\\/g, "\\");
 }
@@ -63,10 +68,12 @@ export const config: AppConfig = {
   DB_ENCRYPT: parseBoolean(process.env.DB_ENCRYPT, false),
   DB_TRUST_CERT: parseBoolean(process.env.DB_TRUST_CERT, true),
   DB_REQUEST_TIMEOUT_MS: parseNumber(process.env.DB_REQUEST_TIMEOUT_MS, 30000),
-  PLAYBACK_STEP_SECONDS: parseNumber(process.env.PLAYBACK_STEP_SECONDS, 5),
-  PLAYBACK_ACTIVE_WINDOW_SECONDS: parseNumber(
-    process.env.PLAYBACK_ACTIVE_WINDOW_SECONDS,
-    300,
+  // Simulated seconds advanced for each one-second frontend polling tick.
+  SPEED_MULTIPLIER: parsePositiveNumber(process.env.SPEED_MULTIPLIER, 60),
+  // Keep selected-bus trails bounded for SQL and Leaflet performance.
+  TRAJECTORY_WINDOW_SECONDS: parsePositiveNumber(
+    process.env.TRAJECTORY_WINDOW_SECONDS,
+    900,
   ),
   PORT: parseNumber(process.env.PORT, 3001),
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? "http://localhost:5173",
