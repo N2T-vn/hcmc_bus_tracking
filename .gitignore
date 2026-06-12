@@ -33,3 +33,6 @@ logs/
 Thumbs.db
 .idea/
 .vscode/
+
+# Database files
+*.csv
